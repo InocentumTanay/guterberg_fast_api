@@ -1,20 +1,23 @@
 # Use a slim Python base image
 FROM python:3.9-slim
 
-# Set working directory inside the container
-WORKDIR /app
+# Set the working directory inside the container to /guterberg_fast_api/apps
+WORKDIR /guterberg_fast_api/apps
 
-# Copy the requirements.txt file to the container
-COPY requirements.txt .
+# Copy the requirements.txt file from the root directory (outside apps) to the container
+COPY ../requirements.txt .
 
 # Install the dependencies
 RUN pip install -r requirements.txt
 
-EXPOSE 5432
+# Expose the port for the FastAPI app
+EXPOSE 8000
 
-# Copy the rest of the application files to the container
+# Set the PYTHONPATH environment variable to include the /guterberg_fast_api/apps directory
+ENV PYTHONPATH=/guterberg_fast_api/apps
+
+# Copy the rest of the application files from the /guterberg_fast_api folder to the container
 COPY . .
 
 # Run the FastAPI app with --reload for auto-reloading
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-
+CMD ["uvicorn", "apps.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
