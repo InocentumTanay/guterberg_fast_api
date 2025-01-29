@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:13
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: gutenberg_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gutenberg-net
+    ports:
+      - 5432:5432
+
+  app:
+    build: .
+    container_name: gutenberg-app
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      - SQLALCHEMY_DATABASE_URL=postgresql://postgres:password@db/gutenberg_db
+    networks:
+      - gutenberg-net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  gutenberg-net:
+    driver: bridge
