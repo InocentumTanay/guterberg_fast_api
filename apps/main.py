@@ -100,6 +100,7 @@ def get_books(
     for book in books:
         book_info = {
             "id": book.id,
+            "gutenberg_id": book.gutenberg_id,
             "title": book.title,
             "authors": [],
             "subjects": [],
