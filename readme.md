@@ -60,7 +60,7 @@ docker-compose up --build -d
 ## 2. Restore Database from Dump
 If you have a PostgreSQL dump file, restore it with:
 ```sh
-docker cp dump.sql <container_id>:/dump.sql
+docker cp gutendex.dump <container_id>:/gutendex.dump
 docker exec -it <container_id> psql -U YOUR_USER -d DB_NAME -f /gutendex.dump
 ```
 Alternatively, using a local `psql` client:
