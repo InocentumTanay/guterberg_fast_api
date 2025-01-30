@@ -16,6 +16,8 @@ services:
   app:
     build: .
     container_name: gutenberg-app
+    env_file:
+      - .env
     depends_on:
       - db
     ports:
