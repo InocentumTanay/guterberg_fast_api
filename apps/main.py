@@ -21,7 +21,10 @@ app = FastAPI()
 # Add your routes here
 @app.get("/")
 def read_root():
-    return {"message": "Hello World"}
+    return {"message": "Gutenberg Fast API"}
+
+
+from fastapi import HTTPException
 
 
 @app.get("/books/", response_model=dict, tags=["Books"])
@@ -51,79 +54,68 @@ def get_books(
     Returns:
     - A list of books sorted by download count.
     """
-    query = db.query(BooksBook)
+    try:
+        query = db.query(BooksBook)
 
-    # Filter by Gutenberg ID if provided
-    if gutenberg_id:
-        query = query.filter(BooksBook.gutenberg_id == gutenberg_id)
-
-    # Filter by languages
-    if language:
-        languages = language.split(",")
-        query = query.join(BooksBookLanguage).join(BooksLanguage).filter(BooksLanguage.code.in_(languages))
-
-    # Filter by mime type
-    if mime_type:
-        query = query.join(BooksFormat).filter(BooksFormat.mime_type == mime_type)
-
-    # Filter by topics (subjects or bookshelves)
-    if topic:
-        topics = topic.split(",")
-        query = query.join(BooksBookSubject).join(BooksSubject).filter(BooksSubject.name.ilike(f"%{topics[0]}%"))
-        query = query.union(
-            query.join(BooksBookBookshelf).join(BooksBookshelf).filter(BooksBookshelf.name.ilike(f"%{topics[0]}%"))
-        )
-        for t in topics[1:]:
+        if gutenberg_id:
+            query = query.filter(BooksBook.gutenberg_id == gutenberg_id)
+        if language:
+            languages = language.split(",")
+            query = query.join(BooksBookLanguage).join(BooksLanguage).filter(BooksLanguage.code.in_(languages))
+        if mime_type:
+            query = query.join(BooksFormat).filter(BooksFormat.mime_type == mime_type)
+        if topic:
+            topics = topic.split(",")
+            query = query.join(BooksBookSubject).join(BooksSubject).filter(BooksSubject.name.ilike(f"%{topics[0]}%"))
             query = query.union(
-                query.join(BooksBookSubject).join(BooksSubject).filter(BooksSubject.name.ilike(f"%{t}%"))
-            ).union(
-                query.join(BooksBookBookshelf).join(BooksBookshelf).filter(BooksBookshelf.name.ilike(f"%{t}%"))
+                query.join(BooksBookBookshelf).join(BooksBookshelf).filter(BooksBookshelf.name.ilike(f"%{topics[0]}%"))
             )
+            for t in topics[1:]:
+                query = query.union(
+                    query.join(BooksBookSubject).join(BooksSubject).filter(BooksSubject.name.ilike(f"%{t}%"))
+                ).union(
+                    query.join(BooksBookBookshelf).join(BooksBookshelf).filter(BooksBookshelf.name.ilike(f"%{t}%"))
+                )
+        if author:
+            query = query.join(BooksBookAuthor).join(BooksAuthor).filter(BooksAuthor.name.ilike(f"%{author}%"))
+        if title:
+            query = query.filter(BooksBook.title.ilike(f"%{title}%"))
 
-    # Filter by author
-    if author:
-        query = query.join(BooksBookAuthor).join(BooksAuthor).filter(BooksAuthor.name.ilike(f"%{author}%"))
+        query = query.order_by(BooksBook.download_count.desc()).offset(skip).limit(limit)
+        books = query.all()
+        total_count = db.query(BooksBook).count()
+        page_count = len(books)
 
-    # Filter by title
-    if title:
-        query = query.filter(BooksBook.title.ilike(f"%{title}%"))
-    # Pagination and sorting by download count
-    query = query.order_by(BooksBook.download_count.desc()).offset(skip).limit(limit)
-    books = query.all()
-    total_count = query.count()
+        result = []
+        for book in books:
+            book_info = {
+                "id": book.id,
+                "download_count": book.download_count,
+                "gutenberg_id": book.gutenberg_id,
+                "title": book.title,
+                "authors": [],
+                "subjects": [],
+                "bookshelves": [],
+                "languages": [],
+                "download_links": []
+            }
+            authors = db.query(BooksAuthor).join(BooksBookAuthor).filter(BooksBookAuthor.book_id == book.id).all()
+            subjects = db.query(BooksSubject).join(BooksBookSubject).filter(BooksBookSubject.book_id == book.id).all()
+            bookshelves = db.query(BooksBookshelf).join(BooksBookBookshelf).filter(
+                BooksBookBookshelf.book_id == book.id).all()
+            languages = db.query(BooksLanguage).join(BooksBookLanguage).filter(
+                BooksBookLanguage.book_id == book.id).all()
+            download_links = db.query(BooksFormat).filter(BooksFormat.book_id == book.id).all()
 
-    # Count books only for the current page
-    page_count = len(books)
+            book_info['authors'] = [author.name for author in authors]
+            book_info['subjects'] = [subject.name for subject in subjects]
+            book_info['bookshelves'] = [bookshelf.name for bookshelf in bookshelves]
+            book_info['languages'] = [language.code for language in languages]
+            book_info['download_links'] = [download_link.url for download_link in download_links]
 
-    # Build the response with book details
-    result = []
-    for book in books:
-        book_info = {
-            "id": book.id,
-            "gutenberg_id": book.gutenberg_id,
-            "title": book.title,
-            "authors": [],
-            "subjects": [],
-            "bookshelves": [],
-            "languages": [],
-            "download_links": []
-        }
+            result.append(book_info)
 
-        # Fetch authors, subjects, bookshelves, languages, and download links in batch
-        authors = db.query(BooksAuthor).join(BooksBookAuthor).filter(BooksBookAuthor.book_id == book.id).all()
-        subjects = db.query(BooksSubject).join(BooksBookSubject).filter(BooksBookSubject.book_id == book.id).all()
-        bookshelves = db.query(BooksBookshelf).join(BooksBookBookshelf).filter(
-            BooksBookBookshelf.book_id == book.id).all()
-        languages = db.query(BooksLanguage).join(BooksBookLanguage).filter(BooksBookLanguage.book_id == book.id).all()
-        download_links = db.query(BooksFormat).filter(BooksFormat.book_id == book.id).all()
+        return {"total_count": total_count, "page_count": page_count, "books": result}
 
-        # Prepare responses
-        book_info['authors'] = [author.name for author in authors]
-        book_info['subjects'] = [subject.name for subject in subjects]
-        book_info['bookshelves'] = [bookshelf.name for bookshelf in bookshelves]
-        book_info['languages'] = [language.code for language in languages]
-        book_info['download_links'] = [download_link.url for download_link in download_links]
-
-        result.append(book_info)
-
-    return {"total_count": total_count, "page_count": page_count, "books": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
