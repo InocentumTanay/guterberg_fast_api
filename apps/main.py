@@ -87,7 +87,7 @@ def get_books(
         query = query.order_by(BooksBook.download_count.desc()).offset(skip).limit(limit)
         books = query.all()
         page_count = len(books)
-
+        filtered_results = []
         result = []
         for book in books:
             book_info = {
@@ -117,7 +117,18 @@ def get_books(
 
             result.append(book_info)
 
-        return {"total_count": total_count, "page_count": page_count, "books": result}
+            filtered_results = [
+                book for book in result
+                if book.get("title") and any([
+                    book.get("authors"),
+                    book.get("subjects"),
+                    book.get("bookshelves"),
+                    book.get("languages"),
+                    book.get("download_links")
+                ])
+            ]
+
+        return {"total_count": total_count, "page_count": page_count, "books": filtered_results}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
