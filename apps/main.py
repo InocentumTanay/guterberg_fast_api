@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 from sqlalchemy.orm import Session
 from typing import Optional
 from .database import get_db
+from sqlalchemy import or_
 from .models import (
     BooksBook,
     BooksLanguage,
@@ -63,27 +64,28 @@ def get_books(
             languages = language.split(",")
             query = query.join(BooksBookLanguage).join(BooksLanguage).filter(BooksLanguage.code.in_(languages))
         if mime_type:
-            query = query.join(BooksFormat).filter(BooksFormat.mime_type == mime_type)
+            query = query.join(BooksFormat).filter(
+                or_(
+                    BooksFormat.mime_type == mime_type,
+                    BooksFormat.mime_type.ilike(f"%{mime_type}%")  # Matches "pdf" inside "application/pdf"
+                )
+            )
         if topic:
             topics = topic.split(",")
-            query = query.join(BooksBookSubject).join(BooksSubject).filter(BooksSubject.name.ilike(f"%{topics[0]}%"))
-            query = query.union(
-                query.join(BooksBookBookshelf).join(BooksBookshelf).filter(BooksBookshelf.name.ilike(f"%{topics[0]}%"))
+            topic_filter = or_(
+                BooksSubject.name.ilike(f"%{t}%") for t in topics
+            ) | or_(
+                BooksBookshelf.name.ilike(f"%{t}%") for t in topics
             )
-            for t in topics[1:]:
-                query = query.union(
-                    query.join(BooksBookSubject).join(BooksSubject).filter(BooksSubject.name.ilike(f"%{t}%"))
-                ).union(
-                    query.join(BooksBookBookshelf).join(BooksBookshelf).filter(BooksBookshelf.name.ilike(f"%{t}%"))
-                )
+            query = query.outerjoin(BooksBookSubject).outerjoin(BooksSubject).outerjoin(
+                BooksBookBookshelf).outerjoin(BooksBookshelf).filter(topic_filter)
         if author:
             query = query.join(BooksBookAuthor).join(BooksAuthor).filter(BooksAuthor.name.ilike(f"%{author}%"))
         if title:
             query = query.filter(BooksBook.title.ilike(f"%{title}%"))
-
+        total_count = query.count()
         query = query.order_by(BooksBook.download_count.desc()).offset(skip).limit(limit)
         books = query.all()
-        total_count = db.query(BooksBook).count()
         page_count = len(books)
 
         result = []
