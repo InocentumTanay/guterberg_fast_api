@@ -1,8 +1,8 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional
 from .database import get_db
-from sqlalchemy import or_
 from .models import (
     BooksBook,
     BooksLanguage,
@@ -20,12 +20,12 @@ app = FastAPI()
 
 
 # Add your routes here
-@app.get("/")
+@app.get("/",  response_model=dict, tags=["root"])
 def read_root():
+    """Returns:
+    - A Test Dict.
+    """
     return {"message": "Gutenberg Fast API"}
-
-
-from fastapi import HTTPException
 
 
 @app.get("/books/", response_model=dict, tags=["Books"])
